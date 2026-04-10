@@ -1,0 +1,9 @@
+<h1>🚀 DevSecOps 3-Tier App</h1>
+<h2>Frontend → Backend → MongoDB</h2>
+<p id="msg"></p>
+
+<script>
+fetch("http://backend-service:3000")
+.then(res => res.text())
+.then(data => document.getElementById("msg").innerHTML = data)
+</script>
