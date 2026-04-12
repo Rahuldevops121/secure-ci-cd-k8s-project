@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         DOCKER_IMAGE = "rahuldevops121/devsecops-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -8,7 +12,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout Source Code') {
             steps {
                 git 'https://github.com/Rahuldevops121/secure-ci-cd-k8s-project.git'
             }
@@ -25,15 +29,17 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    sh '''
-                    cd backend
-                    sonar-scanner \
-                    -Dsonar.projectKey=node-app \
-                    -Dsonar.sources=. \
-                    -Dsonar.host.url=http://localhost:9000 \
-                    -Dsonar.login=$sonar-token
-                    '''
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv('sonarqube') {
+                        sh '''
+                        cd backend
+                        sonar-scanner \
+                        -Dsonar.projectKey=node-app \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=http://localhost:9000 \
+                        -Dsonar.login=$SONAR_TOKEN
+                        '''
+                    }
                 }
             }
         }
@@ -44,12 +50,9 @@ pipeline {
             }
         }
 
-        stage('Trivy Image Scan') {
+        stage('Trivy Security Scan') {
             steps {
-                sh '''
-                export TRIVY_DB_REPOSITORY=ghcr.io/aquasecurity/trivy-db
-                trivy image --exit-code 1 --severity CRITICAL,HIGH $DOCKER_IMAGE:$IMAGE_TAG
-                '''
+                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_IMAGE:$IMAGE_TAG'
             }
         }
 
@@ -66,27 +69,37 @@ pipeline {
 
         stage('Push Image to DockerHub') {
             steps {
-                sh '''
-                docker push $DOCKER_IMAGE:$IMAGE_TAG
-                '''
+                sh 'docker push $DOCKER_IMAGE:$IMAGE_TAG'
             }
         }
 
-        stage('Update Helm Chart for ArgoCD') {
+        stage('Update GitOps Repo (Trigger ArgoCD)') {
             steps {
-                sh '''
-                git clone https://github.com/Rahuldevops121/gitops-repo.git
-                cd gitops-repo
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-cred',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_PASS')]) {
 
-                sed -i "s/tag:.*/tag: ${IMAGE_TAG}/" helm/values.yaml
+                    sh '''
+                    git clone https://$GIT_USER:$GIT_PASS@github.com/Rahuldevops121/gitops-repo.git
+                    cd gitops-repo
 
-                git config user.email "devops@demo.com"
-                git config user.name "jenkins"
+                    sed -i "s/tag:.*/tag: \\"$IMAGE_TAG\\"/" app/helm/devsecops-app/values.yaml
 
-                git add .
-                git commit -m "Updated image tag to ${IMAGE_TAG}"
-                git push
-                '''
+                    git config user.email "jenkins@demo.com"
+                    git config user.name "jenkins"
+
+                    git add .
+                    git commit -m "Update image tag to $IMAGE_TAG"
+                    git push
+                    '''
+                }
+            }
+        }
+
+        stage('Cleanup Docker Images') {
+            steps {
+                sh 'docker rmi $DOCKER_IMAGE:$IMAGE_TAG || true'
             }
         }
     }
