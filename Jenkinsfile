@@ -12,9 +12,10 @@ pipeline {
 
     stages {
 
-        stage('Checkout Source Code') {
+        stage('Checkout Code') {
             steps {
-                git 'https://github.com/Rahuldevops121/secure-ci-cd-k8s-project.git'
+                git branch: 'main',
+                    url: 'https://github.com/Rahuldevops121/secure-ci-cd-k8s-project.git'
             }
         }
 
