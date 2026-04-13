@@ -9,16 +9,6 @@ pipeline {
         DOCKER_IMAGE = "rahuldevops121/devsecops-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
-
-    stages {
-
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main',
-                    url: 'https://github.com/Rahuldevops121/secure-ci-cd-k8s-project.git'
-            }
-        }
-
         stage('Install Dependencies & Unit Test') {
             steps {
                 dir('backend') {
@@ -37,7 +27,7 @@ pipeline {
                         sonar-scanner \
                         -Dsonar.projectKey=node-app \
                         -Dsonar.sources=. \
-                        -Dsonar.host.url=http://localhost:9000 \
+                        -Dsonar.host.url=http://sonarqube:9000 \
                         -Dsonar.login=$SONAR_TOKEN
                         '''
                     }
@@ -53,7 +43,7 @@ pipeline {
 
         stage('Trivy Security Scan') {
             steps {
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_IMAGE:$IMAGE_TAG'
+                sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL $DOCKER_IMAGE:$IMAGE_TAG'
             }
         }
 
