@@ -9,6 +9,9 @@ pipeline {
         DOCKER_IMAGE = "rahuldevops121/devsecops-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
+
+    stages {
+
         stage('Install Dependencies & Unit Test') {
             steps {
                 dir('backend') {
@@ -81,7 +84,7 @@ pipeline {
                     git config user.name "jenkins"
 
                     git add .
-                    git commit -m "Update image tag to $IMAGE_TAG"
+                    git commit -m "Update image tag to $IMAGE_TAG" || true
                     git push
                     '''
                 }
@@ -93,7 +96,10 @@ pipeline {
                 sh 'docker rmi $DOCKER_IMAGE:$IMAGE_TAG || true'
             }
         }
-        post {
+
+    }   // ← THIS WAS MISSING ❗❗❗
+
+    post {
         always {
             echo 'Pipeline completed'
         }
@@ -105,4 +111,3 @@ pipeline {
         }
     }
 }
-
