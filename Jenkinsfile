@@ -93,5 +93,16 @@ pipeline {
                 sh 'docker rmi $DOCKER_IMAGE:$IMAGE_TAG || true'
             }
         }
+        post {
+        always {
+            echo 'Pipeline completed'
+        }
+        success {
+            echo 'Deployment triggered via ArgoCD 🚀'
+        }
+        failure {
+            echo 'Pipeline failed ❌'
+        }
     }
+}
 
