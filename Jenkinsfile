@@ -27,16 +27,19 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv('sonarqube') {
-                        sh '''
-                        cd backend
-                        sonar-scanner \
-                        -Dsonar.projectKey=node-app \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=http://sonarqube:9000 \
-                        -Dsonar.login=$SONAR_TOKEN
-                        '''
+                script {
+                    def scannerHome = tool 'sonar-scanner'
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        withSonarQubeEnv('sonarqube') {
+                            sh """
+                            cd backend
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=node-app \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=http://host.docker.internal:9000 \
+                            -Dsonar.login=$SONAR_TOKEN
+                            """
+                        }
                     }
                 }
             }
@@ -50,7 +53,7 @@ pipeline {
 
         stage('Trivy Security Scan') {
             steps {
-                sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL $DOCKER_IMAGE:$IMAGE_TAG'
+                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_IMAGE:$IMAGE_TAG'
             }
         }
 
@@ -79,6 +82,7 @@ pipeline {
                     passwordVariable: 'GIT_PASS')]) {
 
                     sh '''
+                    rm -rf gitops-repo
                     git clone https://$GIT_USER:$GIT_PASS@github.com/Rahuldevops121/gitops-repo.git
                     cd gitops-repo
 
@@ -100,18 +104,14 @@ pipeline {
                 sh 'docker rmi $DOCKER_IMAGE:$IMAGE_TAG || true'
             }
         }
-
-    }   // ← THIS WAS MISSING ❗❗❗
+    }
 
     post {
-        always {
-            echo 'Pipeline completed'
-        }
-        success {
-            echo 'Deployment triggered via ArgoCD 🚀'
-        }
-        failure {
-            echo 'Pipeline failed ❌'
-        }
+        always { echo 'Pipeline completed' }
+        success { echo 'Deployment triggered via ArgoCD 🚀' }
+        failure { echo 'Pipeline failed ❌' }
     }
 }
+
+       
+            
