@@ -36,8 +36,7 @@ pipeline {
                             ${scannerHome}/bin/sonar-scanner \
                             -Dsonar.projectKey=node-app \
                             -Dsonar.sources=. \
-                            -Dsonar.host.url=http://host.docker.internal:9000 \
-                            -Dsonar.login=$SONAR_TOKEN
+                            -Dsonar.host.url=http://sonarqube:9000 
                             """
                         }
                     }
