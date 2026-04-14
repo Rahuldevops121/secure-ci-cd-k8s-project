@@ -3,6 +3,10 @@ pipeline {
     
     tools {
         nodejs "node"
+        // SonarScanner tool name we created
+        // Manage Jenkins → Global Tool Configuration → sonar-scanner
+        // Name must match below
+        sonarScanner "sonar-scanner"
     }
 
     triggers {
@@ -25,20 +29,20 @@ pipeline {
             }
         }
 
+        // ✅ FIXED SONAR STAGE
         stage('SonarQube Scan') {
             steps {
                 script {
                     def scannerHome = tool 'sonar-scanner'
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                        withSonarQubeEnv('sonarqube') {
-                            sh """
-                            cd backend
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=node-app \
-                            -Dsonar.sources=. \
-                            -Dsonar.host.url=http://sonarqube:9000 
-                            """
-                        }
+                    
+                    withSonarQubeEnv('sonar-server') {
+                        sh """
+                        cd backend
+                        ${scannerHome}/bin/sonar-scanner \
+                          -Dsonar.projectKey=devsecops-node-app \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=http://sonarqube:9000
+                        """
                     }
                 }
             }
@@ -110,7 +114,4 @@ pipeline {
         success { echo 'Deployment triggered via ArgoCD 🚀' }
         failure { echo 'Pipeline failed ❌' }
     }
-}
-
-       
-            
+}            
