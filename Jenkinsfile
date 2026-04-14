@@ -6,7 +6,7 @@ pipeline {
         // SonarScanner tool name we created
         // Manage Jenkins → Global Tool Configuration → sonar-scanner
         // Name must match below
-        sonarScanner "sonar-scanner"
+       
     }
 
     triggers {
@@ -41,7 +41,8 @@ pipeline {
                         ${scannerHome}/bin/sonar-scanner \
                           -Dsonar.projectKey=devsecops-node-app \
                           -Dsonar.sources=. \
-                          -Dsonar.host.url=http://sonarqube:9000
+                          -Dsonar.host.url=$SONAR_HOST_URL \
+                          -Dsonar.token=$SONAR_AUTH_TOKEN
                         """
                     }
                 }
