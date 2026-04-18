@@ -16,7 +16,7 @@ pipeline {
     }
 
     environment {
-        DOCKER_IMAGE = "rahuldevops121/devsecops-app"
+        DOCKER_IMAGE = "rahuldock44/devsecops-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
