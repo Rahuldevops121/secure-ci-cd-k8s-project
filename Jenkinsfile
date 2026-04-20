@@ -8,7 +8,7 @@ pipeline {
     options {
         disableConcurrentBuilds()
         timestamps()
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 60, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
@@ -71,48 +71,64 @@ pipeline {
         // ──────────────────────────────────────────
         stage('Build Docker Images') {
         // ──────────────────────────────────────────
-            steps {
-                sh '''
-                    # ── Build Backend ──
-                    docker pull $BACKEND_IMAGE:latest || true
-                    docker build \
-                        --cache-from $BACKEND_IMAGE:latest \
-                        -t $BACKEND_IMAGE:$IMAGE_TAG \
-                        -t $BACKEND_IMAGE:latest \
-                        ./backend
-
-                    # ── Build Frontend ──
-                    docker pull $FRONTEND_IMAGE:latest || true
-                    docker build \
-                        --cache-from $FRONTEND_IMAGE:latest \
-                        -t $FRONTEND_IMAGE:$IMAGE_TAG \
-                        -t $FRONTEND_IMAGE:latest \
-                        ./frontend
-                '''
+            parallel {
+                stage('Build Backend') {
+                    steps {
+                        sh '''
+                            docker pull $BACKEND_IMAGE:latest || true
+                            docker build \
+                                --cache-from $BACKEND_IMAGE:latest \
+                                --build-arg BUILDKIT_INLINE_CACHE=1 \
+                                -t $BACKEND_IMAGE:$IMAGE_TAG \
+                                -t $BACKEND_IMAGE:latest \
+                                ./backend
+                        '''
+                    }
+                }
+                stage('Build Frontend') {
+                    steps {
+                        sh '''
+                            docker pull $FRONTEND_IMAGE:latest || true
+                            docker build \
+                                --cache-from $FRONTEND_IMAGE:latest \
+                                --build-arg BUILDKIT_INLINE_CACHE=1 \
+                                -t $FRONTEND_IMAGE:$IMAGE_TAG \
+                                -t $FRONTEND_IMAGE:latest \
+                                ./frontend
+                        '''
+                    }
+                }
             }
         }
 
         // ──────────────────────────────────────────
         stage('Trivy Security Scan') {
         // ──────────────────────────────────────────
-            steps {
-                sh '''
-                    mkdir -p $TRIVY_CACHE
-
-                    echo "──── Scanning Backend Image ────"
-                    trivy image \
-                        --cache-dir $TRIVY_CACHE \
-                        --exit-code 0 \
-                        --severity HIGH,CRITICAL \
-                        $BACKEND_IMAGE:$IMAGE_TAG
-
-                    echo "──── Scanning Frontend Image ────"
-                    trivy image \
-                        --cache-dir $TRIVY_CACHE \
-                        --exit-code 0 \
-                        --severity HIGH,CRITICAL \
-                        $FRONTEND_IMAGE:$IMAGE_TAG
-                '''
+            parallel {
+                stage('Scan Backend') {
+                    steps {
+                        sh '''
+                            mkdir -p $TRIVY_CACHE
+                            trivy image \
+                                --cache-dir $TRIVY_CACHE \
+                                --exit-code 0 \
+                                --severity HIGH,CRITICAL \
+                                $BACKEND_IMAGE:$IMAGE_TAG
+                        '''
+                    }
+                }
+                stage('Scan Frontend') {
+                    steps {
+                        sh '''
+                            mkdir -p $TRIVY_CACHE
+                            trivy image \
+                                --cache-dir $TRIVY_CACHE \
+                                --exit-code 0 \
+                                --severity HIGH,CRITICAL \
+                                $FRONTEND_IMAGE:$IMAGE_TAG
+                        '''
+                    }
+                }
             }
         }
 
@@ -120,24 +136,38 @@ pipeline {
         stage('Push Images to DockerHub') {
         // ──────────────────────────────────────────
             options {
-                timeout(time: 20, unit: 'MINUTES')
+                timeout(time: 60, unit: 'MINUTES')
             }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS')]) {
-                    sh '''
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-
-                        # ── Push Backend ──
-                        docker push $BACKEND_IMAGE:$IMAGE_TAG
-                        docker push $BACKEND_IMAGE:latest
-
-                        # ── Push Frontend ──
-                        docker push $FRONTEND_IMAGE:$IMAGE_TAG
-                        docker push $FRONTEND_IMAGE:latest
-                    '''
+            parallel {
+                stage('Push Backend') {
+                    steps {
+                        withCredentials([usernamePassword(
+                            credentialsId: 'docker-cred',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS')]) {
+                            sh '''
+                                echo $DOCKER_PASS | docker login \
+                                    -u $DOCKER_USER --password-stdin
+                                docker push $BACKEND_IMAGE:$IMAGE_TAG
+                                docker push $BACKEND_IMAGE:latest
+                            '''
+                        }
+                    }
+                }
+                stage('Push Frontend') {
+                    steps {
+                        withCredentials([usernamePassword(
+                            credentialsId: 'docker-cred',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS')]) {
+                            sh '''
+                                echo $DOCKER_PASS | docker login \
+                                    -u $DOCKER_USER --password-stdin
+                                docker push $FRONTEND_IMAGE:$IMAGE_TAG
+                                docker push $FRONTEND_IMAGE:latest
+                            '''
+                        }
+                    }
                 }
             }
         }
@@ -153,17 +183,14 @@ pipeline {
                     sh '''
                         rm -rf gitops-repo
 
-                        # Shallow clone — only latest commit
                         git clone --depth 1 \
                             https://$GIT_USER:$GIT_PASS@github.com/Rahuldevops121/gitops-repo.git
 
                         cd gitops-repo
 
-                        # ── Update backend image tag ──
                         sed -i "/^backend:/,/^[^ ]/ s|tag:.*|tag: \\"$IMAGE_TAG\\"|" \
                             app/helm/devsecops-app/values.yaml
 
-                        # ── Update frontend image tag ──
                         sed -i "/^frontend:/,/^[^ ]/ s|tag:.*|tag: \\"$IMAGE_TAG\\"|" \
                             app/helm/devsecops-app/values.yaml
 
@@ -174,7 +201,7 @@ pipeline {
                         git config user.name  "jenkins"
                         git add .
                         git diff --cached --quiet || \
-                            git commit -m "ci: update backend+frontend image tag to $IMAGE_TAG"
+                            git commit -m "ci: update image tag to $IMAGE_TAG"
 
                         git push origin HEAD
                     '''
